@@ -1,66 +1,788 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+'use client';
+import { useState } from 'react';
+
+type ChannelData = {
+  channelId: string;
+  channelName: string;
+  channelUrl: string;
+  auditDate: string;
+  thumbnail: string;
+  country: string;
+  createdYear: string;
+  subscribers: string;
+  totalViews: string;
+  totalVideos: number;
+  overallScore: number;
+  grade: string;
+  brandingScore: number;
+  contentScore: number;
+  seoScore: number;
+  engagementScore: number;
+  monetizationScore: number;
+  growthScore: number;
+  summary: string;
+  revenueOpportunity: string;
+  channelStats: {
+    avgViewsPerVideo: string;
+    uploadFrequency: string;
+    lastUpload: string;
+    estimatedMonthlyViews: string;
+    viewToSubRatio: string;
+    channelAge: string;
+  };
+  topVideos: {
+    title: string;
+    views: string;
+    likes: string;
+    whatWorked: string;
+  }[];
+  brandingAudit: {
+    item: string;
+    status: string;
+    issue: string;
+    fix: string;
+  }[];
+  seoAudit: {
+    item: string;
+    status: string;
+    current: string;
+    issue: string;
+    fix: string;
+  }[];
+  contentAudit: {
+    item: string;
+    status: string;
+    issue: string;
+    fix: string;
+  }[];
+  engagementAudit: {
+    item: string;
+    status: string;
+    issue: string;
+    fix: string;
+  }[];
+  monetizationAudit: {
+    item: string;
+    status: string;
+    current: string;
+    issue: string;
+    fix: string;
+  }[];
+  growthStrategy: {
+    immediate: string[];
+    thisWeek: string[];
+    thisMonth: string[];
+    next90Days: string[];
+  };
+  topFixes: string[];
+  criticalIssues: {
+    title: string;
+    impact: string;
+    fix: string;
+  }[];
+};
 
 export default function Home() {
+  const [url, setUrl] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [loadingStep, setLoadingStep] = useState(0);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState<ChannelData | null>(null);
+  const [activeTab, setActiveTab] = useState('overview');
+
+  const loadingSteps = [
+    'Fetching channel data from YouTube API...',
+    'Analyzing top performing videos...',
+    'Auditing SEO & discoverability...',
+    'Checking monetization signals...',
+    'Generating growth strategy with AI...',
+  ];
+
+  async function runAudit() {
+    if (!url) { setError('Please enter a YouTube channel URL or handle.'); return; }
+    setLoading(true); setError(''); setResult(null); setLoadingStep(0);
+    const interval = setInterval(() => setLoadingStep(s => Math.min(s + 1, loadingSteps.length - 1)), 2800);
+    try {
+      const res = await fetch('/api/audit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: url.trim() }),
+      });
+      const data = await res.json();
+      clearInterval(interval);
+      if (!data.ok) throw new Error(data.error || 'Audit failed');
+      setResult(data.data);
+      setActiveTab('overview');
+    } catch (e: unknown) {
+      clearInterval(interval);
+      setError(e instanceof Error ? e.message : 'Audit failed. Check the URL and try again.');
+    }
+    setLoading(false);
+  }
+
+  function scoreColor(s: number) {
+    if (s >= 80) return '#22c55e';
+    if (s >= 60) return '#f59e0b';
+    return '#ef4444';
+  }
+
+  function statusColor(s: string) {
+    if (s === 'good' || s === 'pass') return '#22c55e';
+    if (s === 'warn' || s === 'needs-improvement') return '#f59e0b';
+    return '#ef4444';
+  }
+
+  function statusBadge(s: string) {
+    if (s === 'good' || s === 'pass') return { label: 'GOOD', bg: 'rgba(34,197,94,0.15)', color: '#22c55e', border: 'rgba(34,197,94,0.3)' };
+    if (s === 'warn' || s === 'needs-improvement') return { label: 'WARN', bg: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: 'rgba(245,158,11,0.3)' };
+    return { label: 'FAIL', bg: 'rgba(239,68,68,0.15)', color: '#ef4444', border: 'rgba(239,68,68,0.3)' };
+  }
+
+  async function downloadReport() {
+    if (!result) return;
+    const r = result;
+    const { jsPDF } = await import('jspdf');
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const W = 210, H = 297, M = 15, CW = 180;
+    let y = 0;
+
+    function np() { doc.addPage(); y = M; }
+    function cy(n: number) { if (y + n > H - M) np(); }
+    function wrap(t: string, w: number, fs: number): string[] { doc.setFontSize(fs); return doc.splitTextToSize(t || '', w); }
+    function sc(s: number): [number, number, number] { return s >= 80 ? [34, 197, 94] : s >= 60 ? [245, 158, 11] : [239, 68, 68]; }
+    function stc(s: string): [number, number, number] { return (s === 'good' || s === 'pass') ? [34, 197, 94] : (s === 'warn' || s === 'needs-improvement') ? [245, 158, 11] : [239, 68, 68]; }
+
+    // ── COVER ──
+    doc.setFillColor(8, 8, 8);
+    doc.rect(0, 0, W, H, 'F');
+    doc.setFillColor(255, 0, 0);
+    doc.rect(0, 0, W, 68, 'F');
+
+    // YouTube play icon
+    doc.setFillColor(255, 255, 255);
+    doc.roundedRect(M, 14, 22, 16, 2, 2, 'F');
+    doc.setFillColor(255, 0, 0);
+    doc.triangle(M + 8, 17, M + 8, 26, M + 18, 21.5, 'F');
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(20); doc.setFont('helvetica', 'bold');
+    doc.text('YouTube Channel Audit', M + 28, 24);
+    doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+    doc.text('Complete Growth & Revenue Report', M + 28, 33);
+    doc.setFontSize(9);
+    doc.text(r.channelName, M, 48);
+    doc.text(r.auditDate, M, 57);
+
+    // Grade box
+    doc.setFillColor(8, 8, 8);
+    doc.roundedRect(W - 52, 10, 38, 48, 4, 4, 'F');
+    doc.setTextColor(...sc(r.overallScore));
+    doc.setFontSize(28); doc.setFont('helvetica', 'bold');
+    doc.text(r.grade, W - 33, 36, { align: 'center' });
+    doc.setFontSize(9); doc.setTextColor(180, 180, 180);
+    doc.text(`${r.overallScore}/100`, W - 33, 48, { align: 'center' });
+
+    // Score boxes
+    const scores = [
+      { l: 'Branding', v: r.brandingScore },
+      { l: 'Content', v: r.contentScore },
+      { l: 'SEO', v: r.seoScore },
+      { l: 'Engagement', v: r.engagementScore },
+    ];
+    let sx = M;
+    scores.forEach(s => {
+      doc.setFillColor(20, 20, 20);
+      doc.roundedRect(sx, 82, 40, 24, 3, 3, 'F');
+      doc.setTextColor(...sc(s.v));
+      doc.setFontSize(15); doc.setFont('helvetica', 'bold');
+      doc.text(String(s.v), sx + 20, 94, { align: 'center' });
+      doc.setFontSize(6.5); doc.setTextColor(120, 120, 120);
+      doc.text(s.l.toUpperCase(), sx + 20, 101, { align: 'center' });
+      sx += 46;
+    });
+
+    // Stats row
+    const stats = [
+      { l: 'Subscribers', v: r.subscribers },
+      { l: 'Total Views', v: r.totalViews },
+      { l: 'Videos', v: String(r.totalVideos) },
+      { l: 'Upload Freq', v: r.channelStats.uploadFrequency },
+    ];
+    sx = M;
+    stats.forEach(s => {
+      doc.setFillColor(15, 15, 15);
+      doc.roundedRect(sx, 118, 40, 22, 2, 2, 'F');
+      doc.setFillColor(255, 0, 0);
+      doc.rect(sx, 118, 3, 22, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+      doc.text(s.v, sx + 22, 128, { align: 'center' });
+      doc.setFontSize(6); doc.setTextColor(120, 120, 120);
+      doc.text(s.l.toUpperCase(), sx + 22, 135, { align: 'center' });
+      sx += 46;
+    });
+
+    // Revenue opportunity box
+    doc.setFillColor(20, 5, 5);
+    doc.roundedRect(M, 152, CW, 46, 4, 4, 'F');
+    doc.setFillColor(255, 0, 0);
+    doc.rect(M, 152, 3, 46, 'F');
+    doc.setTextColor(255, 80, 80); doc.setFontSize(7.5); doc.setFont('helvetica', 'bold');
+    doc.text('REVENUE OPPORTUNITY', M + 8, 161);
+    doc.setTextColor(220, 220, 220); doc.setFontSize(8.5); doc.setFont('helvetica', 'normal');
+    wrap(r.revenueOpportunity || '', CW - 14, 8.5).slice(0, 4).forEach((l: string, i: number) => doc.text(l, M + 8, 169 + i * 6));
+
+    // Summary box
+    doc.setFillColor(18, 18, 18);
+    doc.roundedRect(M, 208, CW, 50, 4, 4, 'F');
+    doc.setTextColor(140, 140, 140); doc.setFontSize(7.5); doc.setFont('helvetica', 'bold');
+    doc.text('AUDIT SUMMARY', M + 8, 218);
+    doc.setTextColor(200, 200, 200); doc.setFont('helvetica', 'normal');
+    wrap(r.summary || '', CW - 14, 8.5).slice(0, 5).forEach((l: string, i: number) => doc.text(l, M + 8, 226 + i * 6));
+
+    function addFooter(p: number, t: number) {
+      doc.setPage(p);
+      doc.setFillColor(255, 0, 0);
+      doc.rect(0, H - 8, W, 8, 'F');
+      doc.setTextColor(255, 255, 255); doc.setFontSize(7);
+      doc.text('YouTube Channel Audit Pro', M, H - 3);
+      doc.text(`Page ${p} of ${t}`, W / 2, H - 3, { align: 'center' });
+      doc.text(r.channelName, W - M, H - 3, { align: 'right' });
+    }
+
+    // ── PAGE 2: CRITICAL ISSUES + TOP FIXES ──
+    np();
+    doc.setFillColor(255, 0, 0); doc.rect(0, 0, W, 13, 'F');
+    doc.setTextColor(255, 255, 255); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+    doc.text('CRITICAL ISSUES & TOP FIXES', M, 9.5);
+    y = 20;
+
+    if (r.criticalIssues?.length > 0) {
+      r.criticalIssues.forEach((issue, idx) => {
+        const lines = wrap(issue.fix || '', CW - 14, 8);
+        const bh = Math.max(28, 16 + lines.length * 5);
+        cy(bh + 4);
+        doc.setFillColor(18, 5, 5); doc.roundedRect(M, y, CW, bh, 2, 2, 'F');
+        doc.setFillColor(255, 0, 0); doc.rect(M, y, 3, bh, 'F');
+        doc.setTextColor(255, 100, 100); doc.setFontSize(9); doc.setFont('helvetica', 'bold');
+        doc.text(`${idx + 1}. ${issue.title}`, M + 7, y + 8);
+        doc.setTextColor(200, 80, 80); doc.setFontSize(7.5); doc.setFont('helvetica', 'normal');
+        doc.text(`Impact: ${issue.impact || ''}`, M + 7, y + 15);
+        doc.setTextColor(34, 197, 94);
+        lines.forEach((l: string, i: number) => doc.text('→ ' + l, M + 7, y + 21 + i * 5));
+        y += bh + 4;
+      });
+    }
+
+    y += 6;
+    doc.setFillColor(255, 0, 0); doc.roundedRect(M, y, CW, 9, 2, 2, 'F');
+    doc.setTextColor(255, 255, 255); doc.setFontSize(8); doc.setFont('helvetica', 'bold');
+    doc.text('TOP PRIORITY FIXES', M + 4, y + 6.5); y += 13;
+    r.topFixes?.forEach((fix, i) => {
+      const lines = wrap(fix, CW - 18, 8.5);
+      const bh = Math.max(14, 7 + lines.length * 6);
+      cy(bh + 3);
+      doc.setFillColor(15, 15, 15); doc.roundedRect(M, y, CW, bh, 2, 2, 'F');
+      doc.setFillColor(255, 0, 0); doc.circle(M + 6.5, y + bh / 2, 3.5, 'F');
+      doc.setTextColor(255, 255, 255); doc.setFontSize(7.5); doc.setFont('helvetica', 'bold');
+      doc.text(String(i + 1), M + 6.5, y + bh / 2 + 2.5, { align: 'center' });
+      doc.setTextColor(200, 200, 200); doc.setFontSize(8.5); doc.setFont('helvetica', 'normal');
+      lines.forEach((l: string, li: number) => doc.text(l, M + 15, y + 7 + li * 6));
+      y += bh + 3;
+    });
+
+    // ── PAGE 3: SEO + CONTENT ──
+    np();
+    doc.setFillColor(255, 0, 0); doc.rect(0, 0, W, 13, 'F');
+    doc.setTextColor(255, 255, 255); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+    doc.text('SEO & CONTENT AUDIT', M, 9.5);
+    y = 20;
+
+    const auditItems = [...(r.seoAudit || []), ...(r.contentAudit || [])];
+    auditItems.forEach(item => {
+      const col = stc(item.status);
+      const fxL = wrap(item.fix || '', CW - 14, 8);
+      const bh = Math.max(26, 14 + fxL.length * 5);
+      cy(bh + 4);
+      doc.setFillColor(15, 15, 15); doc.roundedRect(M, y, CW, bh, 2, 2, 'F');
+      doc.setFillColor(...col); doc.rect(M, y, 3, bh, 'F');
+      const lbl = item.status === 'pass' || item.status === 'good' ? 'GOOD' : item.status === 'warn' ? 'WARN' : 'FAIL';
+      doc.setFillColor(...col); doc.roundedRect(M + 6, y + 3, 14, 6, 1, 1, 'F');
+      doc.setTextColor(8, 8, 8); doc.setFontSize(5.5); doc.setFont('helvetica', 'bold');
+      doc.text(lbl, M + 13, y + 7.5, { align: 'center' });
+      doc.setTextColor(230, 230, 230); doc.setFontSize(8.5); doc.setFont('helvetica', 'bold');
+      doc.text(item.item, M + 24, y + 8);
+      doc.setTextColor(120, 120, 120); doc.setFontSize(7.5); doc.setFont('helvetica', 'normal');
+      if ((item as { current?: string }).current) doc.text(`Current: ${(item as { current?: string }).current}`, M + 6, y + 16);
+      doc.setTextColor(34, 197, 94);
+      fxL.forEach((l: string, i: number) => doc.text(l, M + 6, y + (( item as { current?: string }).current ? 22 : 16) + i * 5));
+      y += bh + 4;
+    });
+
+    // ── PAGE 4: ENGAGEMENT + MONETIZATION ──
+    np();
+    doc.setFillColor(255, 0, 0); doc.rect(0, 0, W, 13, 'F');
+    doc.setTextColor(255, 255, 255); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+    doc.text('ENGAGEMENT & MONETIZATION', M, 9.5);
+    y = 20;
+
+    [...(r.engagementAudit || []), ...(r.monetizationAudit || [])].forEach(item => {
+      const col = stc(item.status);
+      const fxL = wrap(item.fix || '', CW - 14, 8);
+      const bh = Math.max(26, 14 + fxL.length * 5);
+      cy(bh + 4);
+      doc.setFillColor(15, 15, 15); doc.roundedRect(M, y, CW, bh, 2, 2, 'F');
+      doc.setFillColor(...col); doc.rect(M, y, 3, bh, 'F');
+      const lbl2 = item.status === 'pass' || item.status === 'good' ? 'GOOD' : item.status === 'warn' ? 'WARN' : 'FAIL';
+      doc.setFillColor(...col); doc.roundedRect(M + 6, y + 3, 14, 6, 1, 1, 'F');
+      doc.setTextColor(8, 8, 8); doc.setFontSize(5.5); doc.setFont('helvetica', 'bold');
+      doc.text(lbl2, M + 13, y + 7.5, { align: 'center' });
+      doc.setTextColor(230, 230, 230); doc.setFontSize(8.5); doc.setFont('helvetica', 'bold');
+      doc.text(item.item, M + 24, y + 8);
+      doc.setTextColor(120, 120, 120); doc.setFontSize(7.5); doc.setFont('helvetica', 'normal');
+      if ((item as { current?: string }).current) doc.text(`Current: ${(item as { current?: string }).current}`, M + 6, y + 16);
+      doc.setTextColor(34, 197, 94);
+      fxL.forEach((l: string, i: number) => doc.text(l, M + 6, y + ((item as { current?: string }).current ? 22 : 16) + i * 5));
+      y += bh + 4;
+    });
+
+    // ── PAGE 5: GROWTH STRATEGY ──
+    np();
+    doc.setFillColor(255, 0, 0); doc.rect(0, 0, W, 13, 'F');
+    doc.setTextColor(255, 255, 255); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+    doc.text('90-DAY GROWTH STRATEGY', M, 9.5);
+    y = 20;
+
+    const gGroups = [
+      { label: 'DO TODAY', items: r.growthStrategy?.immediate, col: [239, 68, 68] as [number, number, number], bg: [25, 8, 8] as [number, number, number] },
+      { label: 'THIS WEEK', items: r.growthStrategy?.thisWeek, col: [245, 158, 11] as [number, number, number], bg: [22, 16, 5] as [number, number, number] },
+      { label: 'THIS MONTH', items: r.growthStrategy?.thisMonth, col: [34, 197, 94] as [number, number, number], bg: [8, 22, 12] as [number, number, number] },
+      { label: 'NEXT 90 DAYS', items: r.growthStrategy?.next90Days, col: [99, 179, 237] as [number, number, number], bg: [8, 15, 22] as [number, number, number] },
+    ];
+    gGroups.forEach(g => {
+      cy(20);
+      doc.setFillColor(...g.col); doc.roundedRect(M, y, CW, 9, 2, 2, 'F');
+      doc.setTextColor(8, 8, 8); doc.setFontSize(8); doc.setFont('helvetica', 'bold');
+      doc.text(g.label, M + 4, y + 6.5); y += 12;
+      g.items?.forEach(a => {
+        const lines = wrap(a, CW - 14, 8);
+        const bh = Math.max(12, 5 + lines.length * 5);
+        cy(bh + 3);
+        doc.setFillColor(...g.bg); doc.roundedRect(M, y, CW, bh, 2, 2, 'F');
+        doc.setTextColor(...g.col); doc.setFontSize(10); doc.text('→', M + 4, y + bh / 2 + 3);
+        doc.setTextColor(200, 200, 200); doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+        lines.forEach((l: string, li: number) => doc.text(l, M + 12, y + 7 + li * 5));
+        y += bh + 3;
+      });
+      y += 6;
+    });
+
+    const total = (doc as unknown as { internal: { getNumberOfPages: () => number } }).internal.getNumberOfPages();
+    for (let p = 1; p <= total; p++) addFooter(p, total);
+    doc.save(`youtube-audit-${r.channelName.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.pdf`);
+  }
+
+  const tabs = [
+    { id: 'overview', label: '📊 Overview' },
+    { id: 'seo', label: '🔍 SEO' },
+    { id: 'content', label: '🎬 Content' },
+    { id: 'engagement', label: '💬 Engagement' },
+    { id: 'monetization', label: '💰 Monetization' },
+    { id: 'growth', label: '🚀 Growth Plan' },
+  ];
+
+  const AuditCard = ({ item }: { item: { item: string; status: string; issue: string; fix: string; current?: string } }) => {
+    const badge = statusBadge(item.status);
+    return (
+        <div style={{ padding: '18px 20px', borderRadius: 10, background: '#111', marginBottom: 10, borderLeft: `3px solid ${statusColor(item.status)}`, border: `1px solid #1f1f1f`, borderLeftWidth: 3, borderLeftColor: statusColor(item.status), borderLeftStyle: 'solid' }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 5, background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`, letterSpacing: 0.8, lineHeight: 1.5 }}>{badge.label}</span>
+            <span style={{ fontWeight: 700, fontSize: 14, color: '#f0f0f0', lineHeight: 1.4 }}>{item.item}</span>
+          </div>
+          {item.current && <div style={{ fontSize: 12, color: '#555', marginBottom: 5, lineHeight: 1.6 }}>Current: {item.current}</div>}
+          <div style={{ fontSize: 13, color: '#888', marginBottom: 8, lineHeight: 1.65 }}>{item.issue}</div>
+          <div style={{ fontSize: 13, color: '#22c55e', fontWeight: 500, lineHeight: 1.65 }}>→ {item.fix}</div>
+        </div>
+    );
+  };
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>To get started, edit the page.tsx file.</h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+      <div style={{ minHeight: '100vh', background: '#080808', fontFamily: "'Barlow', 'DM Sans', sans-serif", color: '#f0f0f0' }}>
+        <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800;900&family=Barlow+Condensed:wght@700;800;900&display=swap');
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+        @keyframes scanline { 0%{transform:translateY(-100%)} 100%{transform:translateY(100vh)} }
+        * { box-sizing: border-box; }
+        ::-webkit-scrollbar { width:5px; } ::-webkit-scrollbar-track { background:#0d0d0d; } ::-webkit-scrollbar-thumb { background:#ff0000; border-radius:3px; }
+        input::placeholder { color:#333; }
+        .tab-btn:hover { background: rgba(255,0,0,0.08) !important; color: #ff4444 !important; }
+      `}</style>
+
+        {/* NAV */}
+        <nav style={{ background: 'rgba(8,8,8,0.97)', borderBottom: '1px solid #1a1a1a', padding: '0 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 60, position: 'sticky', top: 0, zIndex: 100, backdropFilter: 'blur(10px)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {/* YouTube-style logo */}
+            <div style={{ width: 38, height: 27, background: '#ff0000', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: 0, height: 0, borderTop: '7px solid transparent', borderBottom: '7px solid transparent', borderLeft: '12px solid white', marginLeft: 2 }} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 900, fontSize: 16, color: 'white', letterSpacing: -0.5, lineHeight: 1.3, fontFamily: 'Barlow Condensed' }}>CHANNEL AUDIT PRO</div>
+              <div style={{ fontSize: 9, color: '#ff0000', letterSpacing: 2, lineHeight: 1.3 }}>YOUTUBE GROWTH INTELLIGENCE</div>
+            </div>
+          </div>
+          <div style={{ fontSize: 11, color: '#ff0000', background: 'rgba(255,0,0,0.1)', padding: '5px 14px', borderRadius: 4, border: '1px solid rgba(255,0,0,0.25)', fontWeight: 700, letterSpacing: 0.5 }}>
+            FREE AUDIT
+          </div>
+        </nav>
+
+        {/* HERO */}
+        {!result && !loading && (
+            <div style={{ position: 'relative', overflow: 'hidden' }}>
+              {/* Red gradient bg */}
+              <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 80% 60% at 50% 0%, rgba(255,0,0,0.12) 0%, transparent 70%)', pointerEvents: 'none' }} />
+              {/* Grid lines */}
+              <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(255,0,0,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,0,0,0.03) 1px, transparent 1px)', backgroundSize: '50px 50px', pointerEvents: 'none' }} />
+
+              <div style={{ position: 'relative', padding: '88px 40px 72px', textAlign: 'center', maxWidth: 760, margin: '0 auto' }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '5px 14px', borderRadius: 3, background: 'rgba(255,0,0,0.1)', border: '1px solid rgba(255,0,0,0.2)', marginBottom: 28 }}>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#ff0000', animation: 'pulse 1.5s infinite' }} />
+                  <span style={{ fontSize: 10, color: '#ff6666', fontWeight: 700, letterSpacing: 2 }}>POWERED BY YOUTUBE DATA API + GEMINI AI</span>
+                </div>
+
+                <h1 style={{ fontFamily: 'Barlow Condensed', fontSize: 'clamp(42px,7vw,76px)', fontWeight: 900, color: 'white', margin: '0 0 8px', letterSpacing: -1, lineHeight: 1.05, textTransform: 'uppercase', paddingBottom: 6 }}>
+                  Why Is Your Channel<br />
+                  <span style={{ color: '#ff0000' }}>Not Growing?</span>
+                </h1>
+                <p style={{ fontSize: 17, color: '#555', maxWidth: 500, margin: '20px auto 48px', lineHeight: 1.8 }}>
+                  Enter any YouTube channel. Get a complete audit with exact fixes for SEO, content strategy, engagement and monetization.
+                </p>
+
+                {/* INPUT */}
+                <div style={{ maxWidth: 620, margin: '0 auto 44px' }}>
+                  <div style={{ display: 'flex', gap: 0, background: '#0f0f0f', borderRadius: 8, border: '1px solid #222', overflow: 'hidden', boxShadow: '0 0 40px rgba(255,0,0,0.07)' }}>
+                    <input
+                        value={url}
+                        onChange={e => setUrl(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && runAudit()}
+                        placeholder="@channelhandle or youtube.com/channel/... or channel name"
+                        style={{ flex: 1, padding: '15px 20px', border: 'none', outline: 'none', fontSize: 14, color: '#f0f0f0', background: 'transparent', lineHeight: 1.5 }}
+                    />
+                    <button onClick={runAudit} style={{ padding: '15px 28px', background: '#ff0000', border: 'none', color: 'white', fontSize: '16px', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', letterSpacing: 0.5, fontFamily: 'Barlow Condensed' }}>
+                      AUDIT NOW
+                    </button>
+                  </div>
+                  {error && <div style={{ marginTop: 10, padding: '10px 16px', borderRadius: 6, background: 'rgba(239,68,68,0.1)', color: '#f87171', fontSize: 13, lineHeight: 1.6, border: '1px solid rgba(239,68,68,0.2)' }}>{error}</div>}
+                </div>
+
+                {/* WHAT WE CHECK */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, maxWidth: 680, margin: '0 auto 60px' }}>
+                  {[
+                    { icon: '🎨', label: 'Branding Audit' },
+                    { icon: '🔍', label: 'SEO Analysis' },
+                    { icon: '🎬', label: 'Content Strategy' },
+                    { icon: '💬', label: 'Engagement Score' },
+                    { icon: '💰', label: 'Monetization' },
+                    { icon: '🚀', label: '90-Day Growth Plan' },
+                  ].map(f => (
+                      <div key={f.label} style={{ padding: '12px 16px', borderRadius: 6, background: '#0f0f0f', border: '1px solid #1a1a1a', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 16, lineHeight: 1 }}>{f.icon}</span>
+                        <span style={{ fontSize: 12, color: '#666', fontWeight: 600, lineHeight: 1.4 }}>{f.label}</span>
+                      </div>
+                  ))}
+                </div>
+
+                {/* STATS */}
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 0, borderTop: '1px solid #111', paddingTop: 48, flexWrap: 'wrap' }}>
+                  {[
+                    { num: '2B+', label: 'logged-in users monthly' },
+                    { num: '500hrs', label: 'of video uploaded every minute' },
+                    { num: '90%', label: 'of channels never hit 1000 subs' },
+                  ].map((s, i) => (
+                      <div key={s.label} style={{ flex: 1, minWidth: 180, textAlign: 'center', padding: '0 24px', borderRight: i < 2 ? '1px solid #111' : 'none' }}>
+                        <div style={{ fontFamily: 'Barlow Condensed', fontSize: 38, fontWeight: 900, color: '#ff0000', lineHeight: 1.1, paddingBottom: 4 }}>{s.num}</div>
+                        <div style={{ fontSize: 12, color: '#333', lineHeight: 1.6 }}>{s.label}</div>
+                      </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+        )}
+
+        {/* LOADING */}
+        {loading && (
+            <div style={{ maxWidth: 520, margin: '80px auto 120px', padding: '0 24px', animation: 'fadeUp 0.4s ease' }}>
+              <div style={{ background: '#0f0f0f', borderRadius: 12, padding: 48, border: '1px solid #1a1a1a', textAlign: 'center', boxShadow: '0 0 60px rgba(255,0,0,0.05)' }}>
+                <div style={{ width: 54, height: 54, borderRadius: '50%', border: '3px solid #1a1a1a', borderTop: '3px solid #ff0000', margin: '0 auto 28px', animation: 'spin 0.8s linear infinite' }} />
+                <div style={{ fontFamily: 'Barlow Condensed', fontSize: 22, fontWeight: 900, color: 'white', marginBottom: 6, letterSpacing: 0.5, lineHeight: 1.3 }}>AUDITING CHANNEL</div>
+                <div style={{ fontSize: 13, color: '#ff4444', marginBottom: 32, lineHeight: 1.6 }}>{loadingSteps[loadingStep]}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, textAlign: 'left' }}>
+                  {loadingSteps.map((s, i) => (
+                      <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 13, lineHeight: 1.5 }}>
+                        <div style={{ width: 22, height: 22, borderRadius: 4, background: i < loadingStep ? '#ff0000' : i === loadingStep ? 'rgba(255,0,0,0.15)' : '#111', border: i === loadingStep ? '1px solid #ff0000' : '1px solid #222', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: i < loadingStep ? 'white' : '#ff4444', flexShrink: 0, transition: 'all 0.3s' }}>
+                          {i < loadingStep ? '✓' : i === loadingStep ? '●' : ''}
+                        </div>
+                        <span style={{ color: i <= loadingStep ? '#ccc' : '#333' }}>{s}</span>
+                      </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+        )}
+
+        {/* RESULTS */}
+        {result && (
+            <div style={{ maxWidth: 980, margin: '0 auto', padding: '32px 24px 80px', animation: 'fadeUp 0.4s ease' }}>
+
+              {/* HEADER */}
+              <div style={{ background: '#0f0f0f', borderRadius: 14, padding: '24px 28px', marginBottom: 16, border: '1px solid #1a1a1a', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16, borderTop: '3px solid #ff0000' }}>
+                <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+                  {result.thumbnail && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={result.thumbnail} alt={result.channelName} style={{ width: 60, height: 60, borderRadius: '50%', border: '2px solid #ff0000', objectFit: 'cover' }} />
+                  )}
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#ff0000', letterSpacing: 2, marginBottom: 5, lineHeight: 1.4 }}>AUDIT COMPLETE</div>
+                    <div style={{ fontFamily: 'Barlow Condensed', fontSize: 22, fontWeight: 900, color: 'white', lineHeight: 1.2 }}>{result.channelName}</div>
+                    <div style={{ fontSize: 12, color: '#333', marginTop: 3, lineHeight: 1.5 }}>{result.auditDate} · {result.country}</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <div style={{ textAlign: 'center', background: '#151515', borderRadius: 10, padding: '12px 20px', border: '1px solid #222' }}>
+                    <div style={{ fontFamily: 'Barlow Condensed', fontSize: 42, fontWeight: 900, color: '#ff0000', lineHeight: 1.05, paddingBottom: 3 }}>{result.grade}</div>
+                    <div style={{ fontSize: 9, color: '#444', letterSpacing: 1, lineHeight: 1.5 }}>GRADE</div>
+                  </div>
+                  <div style={{ textAlign: 'center', background: '#151515', borderRadius: 10, padding: '12px 20px', border: '1px solid #222' }}>
+                    <div style={{ fontFamily: 'Barlow Condensed', fontSize: 42, fontWeight: 900, color: 'white', lineHeight: 1.05, paddingBottom: 3 }}>{result.overallScore}</div>
+                    <div style={{ fontSize: 9, color: '#444', letterSpacing: 1, lineHeight: 1.5 }}>SCORE</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* CHANNEL STATS */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px,1fr))', gap: 10, marginBottom: 16 }}>
+                {[
+                  { label: 'Subscribers', value: result.subscribers },
+                  { label: 'Total Views', value: result.totalViews },
+                  { label: 'Total Videos', value: String(result.totalVideos) },
+                  { label: 'Upload Freq', value: result.channelStats?.uploadFrequency },
+                  { label: 'Last Upload', value: result.channelStats?.lastUpload },
+                  { label: 'View/Sub Ratio', value: result.channelStats?.viewToSubRatio },
+                ].map(s => (
+                    <div key={s.label} style={{ background: '#0f0f0f', borderRadius: 10, padding: '14px 16px', border: '1px solid #1a1a1a', textAlign: 'center' }}>
+                      <div style={{ fontFamily: 'Barlow Condensed', fontSize: 20, fontWeight: 800, color: '#ff0000', lineHeight: 1.2, paddingBottom: 3 }}>{s.value}</div>
+                      <div style={{ fontSize: 10, color: '#444', lineHeight: 1.5 }}>{s.label}</div>
+                    </div>
+                ))}
+              </div>
+
+              {/* SCORE GRID */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px,1fr))', gap: 10, marginBottom: 16 }}>
+                {[
+                  { label: 'Branding', score: result.brandingScore },
+                  { label: 'Content', score: result.contentScore },
+                  { label: 'SEO', score: result.seoScore },
+                  { label: 'Engagement', score: result.engagementScore },
+                  { label: 'Monetization', score: result.monetizationScore },
+                  { label: 'Growth', score: result.growthScore },
+                ].map(s => (
+                    <div key={s.label} style={{ background: '#0f0f0f', borderRadius: 10, padding: '14px 16px', border: `1px solid ${scoreColor(s.score)}22`, textAlign: 'center' }}>
+                      <div style={{ fontFamily: 'Barlow Condensed', fontSize: 28, fontWeight: 900, color: scoreColor(s.score), lineHeight: 1.1, paddingBottom: 4 }}>{s.score}</div>
+                      <div style={{ fontSize: 10, color: '#444', letterSpacing: 0.5, marginBottom: 8, lineHeight: 1.5 }}>{s.label.toUpperCase()}</div>
+                      <div style={{ height: 3, borderRadius: 2, background: '#1a1a1a', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${s.score}%`, background: scoreColor(s.score), borderRadius: 2 }} />
+                      </div>
+                    </div>
+                ))}
+              </div>
+
+              {/* REVENUE OPPORTUNITY */}
+              <div style={{ background: '#0f0f0f', borderRadius: 12, padding: '16px 20px', marginBottom: 16, border: '1px solid #1a1a1a', borderLeft: '3px solid #ff0000', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                <span style={{ fontSize: 20, lineHeight: 1.4 }}>💰</span>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#ff4444', letterSpacing: 1.5, marginBottom: 5, lineHeight: 1.4 }}>REVENUE OPPORTUNITY</div>
+                  <div style={{ fontSize: 14, color: '#aaa', lineHeight: 1.75 }}>{result.revenueOpportunity}</div>
+                </div>
+              </div>
+
+              {/* TABS */}
+              <div style={{ display: 'flex', gap: 2, marginBottom: 16, background: '#0f0f0f', borderRadius: 10, padding: 5, border: '1px solid #1a1a1a', flexWrap: 'wrap' }}>
+                {tabs.map(t => (
+                    <button key={t.id} className="tab-btn" onClick={() => setActiveTab(t.id)} style={{ padding: '9px 16px', borderRadius: 7, border: 'none', background: activeTab === t.id ? '#ff0000' : 'transparent', color: activeTab === t.id ? 'white' : '#555', fontSize: 12, fontWeight: 700, cursor: 'pointer', transition: 'all 0.15s', lineHeight: 1.5, letterSpacing: 0.3 }}>
+                      {t.label}
+                    </button>
+                ))}
+              </div>
+
+              {/* OVERVIEW */}
+              {activeTab === 'overview' && (
+                  <div style={{ animation: 'fadeUp 0.3s ease' }}>
+                    <div style={{ background: '#0f0f0f', borderRadius: 12, padding: 24, marginBottom: 14, border: '1px solid #1a1a1a' }}>
+                      <div style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, color: '#ff0000', letterSpacing: 2, marginBottom: 12, background: 'rgba(255,0,0,0.08)', padding: '3px 10px', borderRadius: 3, lineHeight: 1.6 }}>AUDIT SUMMARY</div>
+                      <div style={{ fontSize: 14, color: '#888', lineHeight: 1.85 }}>{result.summary}</div>
+                    </div>
+
+                    {/* Critical Issues */}
+                    {result.criticalIssues?.length > 0 && (
+                        <div style={{ background: '#0f0f0f', borderRadius: 12, padding: 24, marginBottom: 14, border: '1px solid #2a1010', borderTop: '2px solid #ff0000' }}>
+                          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 18 }}>
+                            <span style={{ fontSize: 16, lineHeight: 1.4 }}>🚨</span>
+                            <div>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: '#ff4444', letterSpacing: 1.5, lineHeight: 1.4 }}>CRITICAL ISSUES — KILLING YOUR GROWTH</div>
+                              <div style={{ fontSize: 12, color: '#444', lineHeight: 1.5 }}>Fix these first before anything else</div>
+                            </div>
+                          </div>
+                          {result.criticalIssues.map((issue, i) => (
+                              <div key={i} style={{ padding: '16px 18px', borderRadius: 8, background: '#120808', marginBottom: 10, borderLeft: '3px solid #ff0000' }}>
+                                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 5, color: '#ff6666', lineHeight: 1.4 }}>{issue.title}</div>
+                                <div style={{ fontSize: 12, color: '#cc3333', fontWeight: 600, marginBottom: 7, lineHeight: 1.5 }}>Impact: {issue.impact}</div>
+                                <div style={{ fontSize: 13, color: '#22c55e', fontWeight: 500, lineHeight: 1.65 }}>→ {issue.fix}</div>
+                              </div>
+                          ))}
+                        </div>
+                    )}
+
+                    {/* Top Videos */}
+                    {result.topVideos?.length > 0 && (
+                        <div style={{ background: '#0f0f0f', borderRadius: 12, padding: 24, border: '1px solid #1a1a1a' }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#555', letterSpacing: 1.5, marginBottom: 16, lineHeight: 1.5 }}>🏆 TOP PERFORMING VIDEOS — WHAT&apos;S WORKING</div>
+                          {result.topVideos.map((v, i) => (
+                              <div key={i} style={{ padding: '14px 16px', borderRadius: 8, background: '#111', marginBottom: 10, border: '1px solid #1a1a1a', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                                <div style={{ width: 28, height: 28, borderRadius: 6, background: 'rgba(255,0,0,0.1)', border: '1px solid rgba(255,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: 'Barlow Condensed', fontSize: 14, fontWeight: 900, color: '#ff4444', lineHeight: 1 }}>#{i + 1}</div>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontSize: 13, fontWeight: 700, color: '#e0e0e0', marginBottom: 5, lineHeight: 1.45 }}>{v.title}</div>
+                                  <div style={{ display: 'flex', gap: 16, marginBottom: 6 }}>
+                                    <span style={{ fontSize: 12, color: '#555', lineHeight: 1.5 }}>👁 {v.views}</span>
+                                    <span style={{ fontSize: 12, color: '#555', lineHeight: 1.5 }}>👍 {v.likes}</span>
+                                  </div>
+                                  <div style={{ fontSize: 12, color: '#22c55e', lineHeight: 1.55 }}>✓ {v.whatWorked}</div>
+                                </div>
+                              </div>
+                          ))}
+                        </div>
+                    )}
+                  </div>
+              )}
+
+              {/* SEO */}
+              {activeTab === 'seo' && (
+                  <div style={{ background: '#0f0f0f', borderRadius: 12, padding: 24, border: '1px solid #1a1a1a', animation: 'fadeUp 0.3s ease' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#555', letterSpacing: 1.5, marginBottom: 18, lineHeight: 1.5 }}>SEO & DISCOVERABILITY AUDIT</div>
+                    {result.seoAudit?.map((item, i) => <AuditCard key={i} item={item} />)}
+                  </div>
+              )}
+
+              {/* CONTENT */}
+              {activeTab === 'content' && (
+                  <div style={{ animation: 'fadeUp 0.3s ease' }}>
+                    <div style={{ background: '#0f0f0f', borderRadius: 12, padding: 24, marginBottom: 14, border: '1px solid #1a1a1a' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#555', letterSpacing: 1.5, marginBottom: 18, lineHeight: 1.5 }}>CONTENT STRATEGY AUDIT</div>
+                      {result.contentAudit?.map((item, i) => <AuditCard key={i} item={item} />)}
+                    </div>
+                    <div style={{ background: '#0f0f0f', borderRadius: 12, padding: 24, border: '1px solid #1a1a1a' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#555', letterSpacing: 1.5, marginBottom: 18, lineHeight: 1.5 }}>BRANDING AUDIT</div>
+                      {result.brandingAudit?.map((item, i) => <AuditCard key={i} item={item} />)}
+                    </div>
+                  </div>
+              )}
+
+              {/* ENGAGEMENT */}
+              {activeTab === 'engagement' && (
+                  <div style={{ background: '#0f0f0f', borderRadius: 12, padding: 24, border: '1px solid #1a1a1a', animation: 'fadeUp 0.3s ease' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#555', letterSpacing: 1.5, marginBottom: 18, lineHeight: 1.5 }}>ENGAGEMENT AUDIT</div>
+                    {result.engagementAudit?.map((item, i) => <AuditCard key={i} item={item} />)}
+                  </div>
+              )}
+
+              {/* MONETIZATION */}
+              {activeTab === 'monetization' && (
+                  <div style={{ background: '#0f0f0f', borderRadius: 12, padding: 24, border: '1px solid #1a1a1a', animation: 'fadeUp 0.3s ease' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#555', letterSpacing: 1.5, marginBottom: 18, lineHeight: 1.5 }}>MONETIZATION AUDIT</div>
+                    {result.monetizationAudit?.map((item, i) => <AuditCard key={i} item={item} />)}
+                  </div>
+              )}
+
+              {/* GROWTH */}
+              {activeTab === 'growth' && (
+                  <div style={{ animation: 'fadeUp 0.3s ease' }}>
+                    <div style={{ background: '#0f0f0f', borderRadius: 12, padding: 24, marginBottom: 14, border: '1px solid #1a1a1a', borderTop: '2px solid #ff0000' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#ff4444', letterSpacing: 1.5, marginBottom: 18, lineHeight: 1.5 }}>⚡ TOP PRIORITY FIXES</div>
+                      {result.topFixes?.map((fix, i) => (
+                          <div key={i} style={{ display: 'flex', gap: 14, padding: '12px 16px', borderRadius: 8, background: '#111', marginBottom: 8, alignItems: 'flex-start', border: '1px solid #1a1a1a' }}>
+                            <span style={{ width: 24, height: 24, borderRadius: 5, background: '#ff0000', color: 'white', fontSize: 12, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: 'Barlow Condensed', lineHeight: 1 }}>{i + 1}</span>
+                            <span style={{ fontSize: 14, color: '#ccc', lineHeight: 1.7 }}>{fix}</span>
+                          </div>
+                      ))}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px,1fr))', gap: 12 }}>
+                      {[
+                        { label: 'DO TODAY', items: result.growthStrategy?.immediate, color: '#ef4444', bg: '#120808', border: '#2a1010' },
+                        { label: 'THIS WEEK', items: result.growthStrategy?.thisWeek, color: '#f59e0b', bg: '#12100a', border: '#2a2010' },
+                        { label: 'THIS MONTH', items: result.growthStrategy?.thisMonth, color: '#22c55e', bg: '#081209', border: '#102a12' },
+                        { label: 'NEXT 90 DAYS', items: result.growthStrategy?.next90Days, color: '#60a5fa', bg: '#080c12', border: '#10182a' },
+                      ].map(g => (
+                          <div key={g.label} style={{ background: g.bg, borderRadius: 12, padding: 18, border: `1px solid ${g.border}` }}>
+                            <div style={{ fontFamily: 'Barlow Condensed', fontSize: 13, fontWeight: 900, color: g.color, letterSpacing: 1.5, marginBottom: 14, lineHeight: 1.4 }}>{g.label}</div>
+                            {g.items?.map((a, i) => (
+                                <div key={i} style={{ fontSize: 13, color: '#777', marginBottom: 10, display: 'flex', gap: 8, lineHeight: 1.65 }}>
+                                  <span style={{ color: g.color, flexShrink: 0 }}>→</span>{a}
+                                </div>
+                            ))}
+                          </div>
+                      ))}
+                    </div>
+                  </div>
+              )}
+
+              {/* BUTTONS */}
+              <div style={{ display: 'flex', gap: 12, marginTop: 28, flexWrap: 'wrap' }}>
+                <button onClick={downloadReport} style={{ padding: '14px 28px', borderRadius: 8, background: '#ff0000', border: 'none', color: 'white', fontSize: '16px', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'Barlow Condensed', letterSpacing: 0.5, lineHeight: 1.5 }}>
+                  ↓ DOWNLOAD PDF REPORT
+                </button>
+                <button onClick={() => { setResult(null); setUrl(''); }} style={{ padding: '14px 28px', borderRadius: 8, background: '#111', border: '1px solid #222', color: '#666', fontSize: 14, fontWeight: 600, cursor: 'pointer', lineHeight: 1.5 }}>
+                  ↺ Audit Another Channel
+                </button>
+              </div>
+            </div>
+        )}
+
+        {/* FOOTER */}
+        {!result && (
+            <div style={{ background: '#050505', borderTop: '1px solid #111', padding: '48px 40px 32px', marginTop: 0 }}>
+              <div style={{ maxWidth: 980, margin: '0 auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 32, marginBottom: 36 }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                      <div style={{ width: 36, height: 26, background: '#ff0000', borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div style={{ width: 0, height: 0, borderTop: '6px solid transparent', borderBottom: '6px solid transparent', borderLeft: '10px solid white', marginLeft: 1 }} />
+                      </div>
+                      <span style={{ fontFamily: 'Barlow Condensed', fontWeight: 900, fontSize: 16, color: 'white', letterSpacing: 0.5, lineHeight: 1.4 }}>CHANNEL AUDIT PRO</span>
+                    </div>
+                    <p style={{ fontSize: 13, color: '#2a2a2a', maxWidth: 260, lineHeight: 1.75, margin: 0 }}>Complete YouTube channel audits powered by YouTube Data API and Gemini AI.</p>
+                  </div>
+                  <div style={{ display: 'flex', gap: 48, flexWrap: 'wrap' }}>
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#2a2a2a', letterSpacing: 1.5, marginBottom: 14, lineHeight: 1.5 }}>WHAT WE AUDIT</div>
+                      {['Branding & Identity', 'SEO & Discoverability', 'Content Strategy', 'Engagement Signals', 'Monetization Readiness', '90-Day Growth Plan'].map(item => (
+                          <div key={item} style={{ fontSize: 13, color: '#2a2a2a', marginBottom: 8, lineHeight: 1.55 }}>{item}</div>
+                      ))}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#2a2a2a', letterSpacing: 1.5, marginBottom: 14, lineHeight: 1.5 }}>POWERED BY</div>
+                      {['YouTube Data API v3', 'Gemini 2.5 Flash AI', 'Real Channel Data', 'Growth Framework'].map(item => (
+                          <div key={item} style={{ fontSize: 13, color: '#2a2a2a', marginBottom: 8, lineHeight: 1.55 }}>{item}</div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ borderTop: '1px solid #111', paddingTop: 24, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                  <div style={{ fontSize: 12, color: '#222', lineHeight: 1.5 }}>© 2026 Channel Audit Pro · Free YouTube Analysis</div>
+                  <div style={{ fontSize: 12, color: '#222', lineHeight: 1.5 }}>Built for creators who want to grow faster</div>
+                </div>
+              </div>
+            </div>
+        )}
+      </div>
   );
 }
