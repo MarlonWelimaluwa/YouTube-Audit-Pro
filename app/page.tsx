@@ -143,14 +143,26 @@ export default function Home() {
     const r = result;
     const { jsPDF } = await import('jspdf');
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const W = 210, H = 297, M = 15, CW = 180;
+    const W = 210, H = 297, M = 14, CW = 182;
     let y = 0;
 
+    // Strip markdown bold/italic and non-latin unicode chars for PDF
+    function clean(t: string): string {
+      return (t || '')
+          .replace(/\*\*(.*?)\*\*/g, '$1')   // remove **bold**
+          .replace(/\*(.*?)\*/g, '$1')         // remove *italic*
+          .replace(/[^\x00-\x7F]/g, (c) => {   // replace non-ASCII with ?
+            // Keep common punctuation that jsPDF handles
+            const safe: Record<string, string> = { '’': "'", '‘': "'", '“': '"', '”': '"', '–': '-', '—': '-', '…': '...' };
+            return safe[c] || '';
+          });
+    }
     function np() { doc.addPage(); y = M; }
-    function cy(n: number) { if (y + n > H - M) np(); }
-    function wrap(t: string, w: number, fs: number): string[] { doc.setFontSize(fs); return doc.splitTextToSize(t || '', w); }
+    function cy(n: number) { if (y + n > H - 20) np(); }
+    function wrap(t: string, w: number, fs: number): string[] { doc.setFontSize(fs); return doc.splitTextToSize(clean(t), w); }
     function sc(s: number): [number, number, number] { return s >= 80 ? [34, 197, 94] : s >= 60 ? [245, 158, 11] : [239, 68, 68]; }
     function stc(s: string): [number, number, number] { return (s === 'good' || s === 'pass') ? [34, 197, 94] : (s === 'warn' || s === 'needs-improvement') ? [245, 158, 11] : [239, 68, 68]; }
+    function bullet() { return '>'; }
 
     // ── COVER ──
     doc.setFillColor(8, 8, 8);
@@ -170,8 +182,8 @@ export default function Home() {
     doc.setFontSize(10); doc.setFont('helvetica', 'normal');
     doc.text('Complete Growth & Revenue Report', M + 28, 33);
     doc.setFontSize(9);
-    doc.text(r.channelName, M, 48);
-    doc.text(r.auditDate, M, 57);
+    doc.text(clean(r.channelName), M, 48);
+    doc.text(clean(r.auditDate), M, 57);
 
     // Grade box
     doc.setFillColor(8, 8, 8);
@@ -223,22 +235,27 @@ export default function Home() {
     });
 
     // Revenue opportunity box
+    const revLines = wrap(r.revenueOpportunity || '', CW - 14, 8).slice(0, 6);
+    const revH = Math.max(36, 14 + revLines.length * 5.5);
     doc.setFillColor(20, 5, 5);
-    doc.roundedRect(M, 152, CW, 46, 4, 4, 'F');
+    doc.roundedRect(M, 152, CW, revH, 4, 4, 'F');
     doc.setFillColor(255, 0, 0);
-    doc.rect(M, 152, 3, 46, 'F');
+    doc.rect(M, 152, 3, revH, 'F');
     doc.setTextColor(255, 80, 80); doc.setFontSize(7.5); doc.setFont('helvetica', 'bold');
     doc.text('REVENUE OPPORTUNITY', M + 8, 161);
-    doc.setTextColor(220, 220, 220); doc.setFontSize(8.5); doc.setFont('helvetica', 'normal');
-    wrap(r.revenueOpportunity || '', CW - 14, 8.5).slice(0, 4).forEach((l: string, i: number) => doc.text(l, M + 8, 169 + i * 6));
+    doc.setTextColor(220, 220, 220); doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+    revLines.forEach((l: string, i: number) => doc.text(l, M + 8, 169 + i * 5.5));
 
     // Summary box
+    const sumStart = 152 + revH + 8;
+    const sumLines = wrap(r.summary || '', CW - 14, 8).slice(0, 6);
+    const sumH = Math.max(36, 14 + sumLines.length * 5.5);
     doc.setFillColor(18, 18, 18);
-    doc.roundedRect(M, 208, CW, 50, 4, 4, 'F');
+    doc.roundedRect(M, sumStart, CW, sumH, 4, 4, 'F');
     doc.setTextColor(140, 140, 140); doc.setFontSize(7.5); doc.setFont('helvetica', 'bold');
-    doc.text('AUDIT SUMMARY', M + 8, 218);
-    doc.setTextColor(200, 200, 200); doc.setFont('helvetica', 'normal');
-    wrap(r.summary || '', CW - 14, 8.5).slice(0, 5).forEach((l: string, i: number) => doc.text(l, M + 8, 226 + i * 6));
+    doc.text('AUDIT SUMMARY', M + 8, sumStart + 9);
+    doc.setTextColor(200, 200, 200); doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+    sumLines.forEach((l: string, i: number) => doc.text(l, M + 8, sumStart + 17 + i * 5.5));
 
     function addFooter(p: number, t: number) {
       doc.setPage(p);
@@ -259,17 +276,20 @@ export default function Home() {
 
     if (r.criticalIssues?.length > 0) {
       r.criticalIssues.forEach((issue, idx) => {
-        const lines = wrap(issue.fix || '', CW - 14, 8);
-        const bh = Math.max(28, 16 + lines.length * 5);
+        const lines = wrap(issue.fix || '', CW - 16, 8);
+        const impL = wrap('Impact: ' + (issue.impact || ''), CW - 16, 7.5);
+        const bh = Math.max(30, 10 + impL.length * 5 + lines.length * 5 + 8);
         cy(bh + 4);
         doc.setFillColor(18, 5, 5); doc.roundedRect(M, y, CW, bh, 2, 2, 'F');
         doc.setFillColor(255, 0, 0); doc.rect(M, y, 3, bh, 'F');
         doc.setTextColor(255, 100, 100); doc.setFontSize(9); doc.setFont('helvetica', 'bold');
-        doc.text(`${idx + 1}. ${issue.title}`, M + 7, y + 8);
+        doc.text(clean(`${idx + 1}. ${issue.title}`), M + 7, y + 8);
+        const impactLines = wrap('Impact: ' + (issue.impact || ''), CW - 16, 7.5);
         doc.setTextColor(200, 80, 80); doc.setFontSize(7.5); doc.setFont('helvetica', 'normal');
-        doc.text(`Impact: ${issue.impact || ''}`, M + 7, y + 15);
+        impactLines.forEach((l: string, i: number) => doc.text(l, M + 7, y + 15 + i * 5));
+        const impactOffset = impactLines.length * 5;
         doc.setTextColor(34, 197, 94);
-        lines.forEach((l: string, i: number) => doc.text('→ ' + l, M + 7, y + 21 + i * 5));
+        lines.forEach((l: string, i: number) => doc.text('> ' + l, M + 7, y + 15 + impactOffset + i * 5));
         y += bh + 4;
       });
     }
@@ -286,8 +306,8 @@ export default function Home() {
       doc.setFillColor(255, 0, 0); doc.circle(M + 6.5, y + bh / 2, 3.5, 'F');
       doc.setTextColor(255, 255, 255); doc.setFontSize(7.5); doc.setFont('helvetica', 'bold');
       doc.text(String(i + 1), M + 6.5, y + bh / 2 + 2.5, { align: 'center' });
-      doc.setTextColor(200, 200, 200); doc.setFontSize(8.5); doc.setFont('helvetica', 'normal');
-      lines.forEach((l: string, li: number) => doc.text(l, M + 15, y + 7 + li * 6));
+      doc.setTextColor(200, 200, 200); doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+      lines.forEach((l: string, li: number) => doc.text(l, M + 14, y + 7 + li * 5));
       y += bh + 3;
     });
 
@@ -301,21 +321,26 @@ export default function Home() {
     const auditItems = [...(r.seoAudit || []), ...(r.contentAudit || [])];
     auditItems.forEach(item => {
       const col = stc(item.status);
-      const fxL = wrap(item.fix || '', CW - 14, 8);
-      const bh = Math.max(26, 14 + fxL.length * 5);
+      const fxL = wrap(item.fix || '', CW - 8, 8);
+      const curL = (item as { current?: string }).current ? wrap('Current: ' + (item as { current?: string }).current, CW - 8, 7.5) : [];
+      const bh = Math.max(22, 12 + curL.length * 5 + fxL.length * 5);
       cy(bh + 4);
       doc.setFillColor(15, 15, 15); doc.roundedRect(M, y, CW, bh, 2, 2, 'F');
       doc.setFillColor(...col); doc.rect(M, y, 3, bh, 'F');
       const lbl = item.status === 'pass' || item.status === 'good' ? 'GOOD' : item.status === 'warn' ? 'WARN' : 'FAIL';
-      doc.setFillColor(...col); doc.roundedRect(M + 6, y + 3, 14, 6, 1, 1, 'F');
+      doc.setFillColor(...col); doc.roundedRect(M + 5, y + 3, 14, 6, 1, 1, 'F');
       doc.setTextColor(8, 8, 8); doc.setFontSize(5.5); doc.setFont('helvetica', 'bold');
-      doc.text(lbl, M + 13, y + 7.5, { align: 'center' });
-      doc.setTextColor(230, 230, 230); doc.setFontSize(8.5); doc.setFont('helvetica', 'bold');
-      doc.text(item.item, M + 24, y + 8);
-      doc.setTextColor(120, 120, 120); doc.setFontSize(7.5); doc.setFont('helvetica', 'normal');
-      if ((item as { current?: string }).current) doc.text(`Current: ${(item as { current?: string }).current}`, M + 6, y + 16);
-      doc.setTextColor(34, 197, 94);
-      fxL.forEach((l: string, i: number) => doc.text(l, M + 6, y + (( item as { current?: string }).current ? 22 : 16) + i * 5));
+      doc.text(lbl, M + 12, y + 7.5, { align: 'center' });
+      doc.setTextColor(230, 230, 230); doc.setFontSize(8); doc.setFont('helvetica', 'bold');
+      doc.text(clean(item.item), M + 22, y + 8);
+      let itemY = y + 14;
+      if (curL.length > 0) {
+        doc.setTextColor(120, 120, 120); doc.setFontSize(7.5); doc.setFont('helvetica', 'normal');
+        curL.forEach((l: string, i: number) => { doc.text(l, M + 5, itemY + i * 5); });
+        itemY += curL.length * 5;
+      }
+      doc.setTextColor(34, 197, 94); doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+      fxL.forEach((l: string, i: number) => doc.text(l, M + 5, itemY + i * 5));
       y += bh + 4;
     });
 
@@ -328,21 +353,26 @@ export default function Home() {
 
     [...(r.engagementAudit || []), ...(r.monetizationAudit || [])].forEach(item => {
       const col = stc(item.status);
-      const fxL = wrap(item.fix || '', CW - 14, 8);
-      const bh = Math.max(26, 14 + fxL.length * 5);
+      const fxL2 = wrap(item.fix || '', CW - 8, 8);
+      const curL2 = (item as { current?: string }).current ? wrap('Current: ' + (item as { current?: string }).current, CW - 8, 7.5) : [];
+      const bh = Math.max(22, 12 + curL2.length * 5 + fxL2.length * 5);
       cy(bh + 4);
       doc.setFillColor(15, 15, 15); doc.roundedRect(M, y, CW, bh, 2, 2, 'F');
       doc.setFillColor(...col); doc.rect(M, y, 3, bh, 'F');
       const lbl2 = item.status === 'pass' || item.status === 'good' ? 'GOOD' : item.status === 'warn' ? 'WARN' : 'FAIL';
-      doc.setFillColor(...col); doc.roundedRect(M + 6, y + 3, 14, 6, 1, 1, 'F');
+      doc.setFillColor(...col); doc.roundedRect(M + 5, y + 3, 14, 6, 1, 1, 'F');
       doc.setTextColor(8, 8, 8); doc.setFontSize(5.5); doc.setFont('helvetica', 'bold');
-      doc.text(lbl2, M + 13, y + 7.5, { align: 'center' });
-      doc.setTextColor(230, 230, 230); doc.setFontSize(8.5); doc.setFont('helvetica', 'bold');
-      doc.text(item.item, M + 24, y + 8);
-      doc.setTextColor(120, 120, 120); doc.setFontSize(7.5); doc.setFont('helvetica', 'normal');
-      if ((item as { current?: string }).current) doc.text(`Current: ${(item as { current?: string }).current}`, M + 6, y + 16);
-      doc.setTextColor(34, 197, 94);
-      fxL.forEach((l: string, i: number) => doc.text(l, M + 6, y + ((item as { current?: string }).current ? 22 : 16) + i * 5));
+      doc.text(lbl2, M + 12, y + 7.5, { align: 'center' });
+      doc.setTextColor(230, 230, 230); doc.setFontSize(8); doc.setFont('helvetica', 'bold');
+      doc.text(clean(item.item), M + 22, y + 8);
+      let itemY2 = y + 14;
+      if (curL2.length > 0) {
+        doc.setTextColor(120, 120, 120); doc.setFontSize(7.5); doc.setFont('helvetica', 'normal');
+        curL2.forEach((l: string, i: number) => { doc.text(l, M + 5, itemY2 + i * 5); });
+        itemY2 += curL2.length * 5;
+      }
+      doc.setTextColor(34, 197, 94); doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+      fxL2.forEach((l: string, i: number) => doc.text(l, M + 5, itemY2 + i * 5));
       y += bh + 4;
     });
 
@@ -366,12 +396,12 @@ export default function Home() {
       doc.text(g.label, M + 4, y + 6.5); y += 12;
       g.items?.forEach(a => {
         const lines = wrap(a, CW - 14, 8);
-        const bh = Math.max(12, 5 + lines.length * 5);
+        const bh = Math.max(14, 8 + lines.length * 5);
         cy(bh + 3);
         doc.setFillColor(...g.bg); doc.roundedRect(M, y, CW, bh, 2, 2, 'F');
-        doc.setTextColor(...g.col); doc.setFontSize(10); doc.text('→', M + 4, y + bh / 2 + 3);
+        doc.setTextColor(...g.col); doc.setFontSize(9); doc.text('>', M + 4, y + bh / 2 + 3);
         doc.setTextColor(200, 200, 200); doc.setFontSize(8); doc.setFont('helvetica', 'normal');
-        lines.forEach((l: string, li: number) => doc.text(l, M + 12, y + 7 + li * 5));
+        lines.forEach((l: string, li: number) => doc.text(l, M + 11, y + 7 + li * 5));
         y += bh + 3;
       });
       y += 6;
