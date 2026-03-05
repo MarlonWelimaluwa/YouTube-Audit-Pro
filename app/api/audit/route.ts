@@ -254,12 +254,33 @@ function getLastUpload(videos: VideoInfo[]): string {
 }
 
 function extractJSON(text: string): string {
-    const cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
-    const fixed = cleaned.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
-    const start = fixed.indexOf('{');
-    const end = fixed.lastIndexOf('}');
+    let cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
     if (start === -1 || end === -1) throw new Error('No valid JSON found');
-    return fixed.slice(start, end + 1);
+    cleaned = cleaned.slice(start, end + 1);
+    // Fix trailing commas before } and ]
+    cleaned = cleaned.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
+    // Fix unescaped quotes inside strings (basic)
+    // Remove any control characters
+    cleaned = cleaned.replace(/[\x00-\x09\x0b\x0c\x0e-\x1f]/g, '');
+    // Try parse — if fails, try aggressive line-by-line repair
+    try {
+        JSON.parse(cleaned);
+        return cleaned;
+    } catch {
+        // Try to fix common Gemini issues: smart quotes
+        cleaned = cleaned
+            .replace(/\u2018|\u2019/g, "\'")
+            .replace(/\u201c|\u201d/g, '\\"')
+            .replace(/\r/g, '\\r');
+        try {
+            JSON.parse(cleaned);
+            return cleaned;
+        } catch (e2) {
+            throw new Error(`JSON parse failed: ${e2 instanceof Error ? e2.message : String(e2)}`);
+        }
+    }
 }
 
 async function callGemini(system: string, user: string): Promise<string> {
@@ -273,7 +294,7 @@ async function callGemini(system: string, user: string): Promise<string> {
                 contents: [{ role: 'user', parts: [{ text: user }] }],
                 generationConfig: {
                     temperature: 0.3,
-                    maxOutputTokens: 8192,
+                    maxOutputTokens: 16000,
                     responseMimeType: 'application/json',
                 },
             }),
@@ -406,7 +427,7 @@ Return this EXACT JSON:
     "channelAge": "${channelAgeYears} years"
   },
   "topVideos": [
-    ${topVideos.slice(0, 3).map(v => `{
+    ${topVideos.slice(0, 2).map(v => `{
       "title": "${v.title.replace(/"/g, '\\"').slice(0, 80)}",
       "views": "${formatNumber(v.views)}",
       "likes": "${formatNumber(v.likes)}",
