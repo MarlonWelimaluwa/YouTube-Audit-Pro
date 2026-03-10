@@ -254,33 +254,44 @@ function getLastUpload(videos: VideoInfo[]): string {
 }
 
 function extractJSON(text: string): string {
+    // Strip markdown fences
     let cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
     const start = cleaned.indexOf('{');
     const end = cleaned.lastIndexOf('}');
     if (start === -1 || end === -1) throw new Error('No valid JSON found');
     cleaned = cleaned.slice(start, end + 1);
-    // Fix trailing commas before } and ]
-    cleaned = cleaned.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
-    // Fix unescaped quotes inside strings (basic)
-    // Remove any control characters
-    cleaned = cleaned.replace(/[\x00-\x09\x0b\x0c\x0e-\x1f]/g, '');
-    // Try parse — if fails, try aggressive line-by-line repair
-    try {
-        JSON.parse(cleaned);
-        return cleaned;
-    } catch {
-        // Try to fix common Gemini issues: smart quotes
-        cleaned = cleaned
-            .replace(/\u2018|\u2019/g, "\'")
-            .replace(/\u201c|\u201d/g, '\\"')
-            .replace(/\r/g, '\\r');
-        try {
-            JSON.parse(cleaned);
-            return cleaned;
-        } catch (e2) {
-            throw new Error(`JSON parse failed: ${e2 instanceof Error ? e2.message : String(e2)}`);
+
+    // Round 1: basic cleanup
+    cleaned = cleaned
+        .replace(/[\x00-\x09\x0b\x0c\x0e-\x1f]/g, '') // control chars
+        .replace(/\u2018|\u2019/g, "\'")                   // smart single quotes
+        .replace(/\u201c|\u201d/g, '"')                     // smart double quotes → plain
+        .replace(/,\s*}/g, '}')                              // trailing commas
+        .replace(/,\s*]/g, ']');
+
+    // Round 2: try parse
+    try { JSON.parse(cleaned); return cleaned; } catch { /* continue */ }
+
+    // Round 3: aggressive — fix unescaped newlines and quotes inside string values
+    // Replace literal newlines inside JSON strings with \n
+    cleaned = cleaned.replace(/"((?:[^"\\]|\\.)*)"/g, (_match, inner) => {
+        const fixed = inner
+            .replace(/\n/g, '\\n')
+            .replace(/\r/g, '\\r')
+            .replace(/\t/g, '\\t');
+        return `"${fixed}"`;
+    });
+    try { JSON.parse(cleaned); return cleaned; } catch { /* continue */ }
+
+    // Round 4: truncate at last valid closing brace
+    for (let i = cleaned.length - 1; i > 0; i--) {
+        if (cleaned[i] === '}') {
+            const candidate = cleaned.slice(0, i + 1);
+            try { JSON.parse(candidate); return candidate; } catch { /* keep looking */ }
         }
     }
+
+    throw new Error('JSON parse failed after all repair attempts');
 }
 
 async function callGemini(system: string, user: string): Promise<string> {
@@ -294,8 +305,7 @@ async function callGemini(system: string, user: string): Promise<string> {
                 contents: [{ role: 'user', parts: [{ text: user }] }],
                 generationConfig: {
                     temperature: 0.3,
-                    maxOutputTokens: 16000,
-                    responseMimeType: 'application/json',
+                    maxOutputTokens: 8000,
                 },
             }),
         }
