@@ -415,7 +415,6 @@ Return this EXACT JSON:
   }
 }`;
 
-
       setLoadingStep(3);
 
       // Step 3: Call Gemini from browser — no Vercel timeout possible
@@ -739,6 +738,18 @@ Return this EXACT JSON:
 
     const total = (doc as unknown as { internal: { getNumberOfPages: () => number } }).internal.getNumberOfPages();
     for (let p = 1; p <= total; p++) addFooter(p, total);
+
+    // DISCLAIMER
+    doc.setPage(total);
+    const disclaimer = 'Note: Community tab activity, channel membership activation status, and Super Thanks enablement cannot be verified through standard channel data and require manual confirmation in YouTube Studio. All other findings in this report are based on verified channel data.';
+    const dLines = wrap(disclaimer, CW, 7);
+    const dH = dLines.length * 4.5 + 10;
+    const dY = H - 8 - dH - 4;
+    doc.setFillColor(18, 18, 18);
+    doc.roundedRect(M, dY, CW, dH, 2, 2, 'F');
+    doc.setTextColor(80, 80, 80); doc.setFontSize(7); doc.setFont('helvetica', 'normal');
+    dLines.forEach((l: string, i: number) => doc.text(l, M + 4, dY + 7 + i * 4.5));
+
     doc.save(`youtube-audit-${r.channelName.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.pdf`);
   }
 
