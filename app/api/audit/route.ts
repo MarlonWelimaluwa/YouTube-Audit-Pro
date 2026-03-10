@@ -329,7 +329,10 @@ export async function POST(req: NextRequest) {
 
         const uploadFreq = getUploadFrequency(topVideos);
         const lastUpload = getLastUpload(topVideos);
-        const avgViews = topVideos.length > 0 ? Math.round(topVideos.reduce((a, v) => a + v.views, 0) / topVideos.length) : 0;
+        // FIX: Use totalViews / totalVideos for real channel average — NOT top 5 average (inflates 3x)
+        const avgViews = channelInfo.totalVideos > 0
+            ? Math.round(channelInfo.totalViews / channelInfo.totalVideos)
+            : topVideos.length > 0 ? Math.round(topVideos.reduce((a, v) => a + v.views, 0) / topVideos.length) : 0;
         const viewToSubRatio = channelInfo.subscribers > 0 ? `${((avgViews / channelInfo.subscribers) * 100).toFixed(1)}%` : 'N/A';
         const channelAgeYears = channelInfo.createdAt ? Math.floor((Date.now() - new Date(channelInfo.createdAt).getTime()) / (1000 * 60 * 60 * 24 * 365)) : 0;
 
@@ -343,6 +346,10 @@ export async function POST(req: NextRequest) {
         const descriptionAvgLength = topVideos.length > 0
             ? Math.round(topVideos.reduce((a, v) => a + v.description.length, 0) / topVideos.length)
             : 0;
+        // Detect affiliate links, community tab posts, and chapters from real data
+        const hasAffiliateLinks = topVideos.some(v => /amzn\.|bit\.ly|goo\.gl|affiliat|referral|promo|discount|coupon/i.test(v.description));
+        const affiliateStatus = hasAffiliateLinks ? '"warn"' : '"fail"';
+        const affiliateCurrent = hasAffiliateLinks ? '"affiliate links detected in descriptions"' : '"no affiliate links found in top video descriptions"';
 
         const userPrompt = `Audit this YouTube channel and generate a complete professional growth report.
 
@@ -477,16 +484,16 @@ Return this EXACT JSON:
   "engagementAudit": [
     {"item": "Like-to-View Ratio", "status": "${topVideos.length > 0 && topVideos[0].views > 0 && (topVideos[0].likes / topVideos[0].views) < 0.02 ? 'fail' : 'warn'}", "current": "${topVideos.length > 0 && topVideos[0].views > 0 ? ((topVideos[0].likes / topVideos[0].views) * 100).toFixed(1) : 'N/A'}% on top video", "issue": "specific engagement issue", "fix": "exact fix to boost likes"},
     {"item": "Comment Engagement", "status": "warn", "current": "based on comment ratios", "issue": "specific comment engagement issue", "fix": "exact CTA formula that drives comments in their niche"},
-    {"item": "Community Tab Usage", "status": "${channelInfo.subscribers >= 500 ? 'warn' : 'fail'}", "current": "${channelInfo.subscribers >= 500 ? 'Eligible but likely underused' : 'Not yet eligible (need 500 subs)'}", "issue": "specific community tab issue", "fix": "exact community post strategy"},
+    {"item": "Community Tab Usage", "status": "${channelInfo.subscribers >= 500 ? 'warn' : 'fail'}", "current": "${channelInfo.subscribers >= 500 ? 'Eligible — community tab activity not detectable via API' : 'Not yet eligible (need 500 subs)'}", "issue": "specific community tab issue", "fix": "exact community post strategy"},
     {"item": "End Screens & Cards", "status": "warn", "issue": "specific end screen issue based on their video data", "fix": "exact end screen strategy"},
     {"item": "Call-to-Action Strategy", "status": "warn", "issue": "specific CTA issue", "fix": "exact CTA placement and wording for their niche"}
   ],
   "monetizationAudit": [
     {"item": "YouTube Partner Program", "status": "${monetizationEligible ? 'pass' : 'fail'}", "current": "${channelInfo.subscribers} subscribers / 1000 needed", "issue": "${monetizationEligible ? 'Already eligible' : 'Need ' + (1000 - channelInfo.subscribers) + ' more subscribers'}", "fix": "${monetizationEligible ? 'Enable monetization in YouTube Studio if not already done' : 'Specific fastest path to 1000 subscribers for their niche'}"},
-    {"item": "Channel Memberships", "status": "${channelInfo.subscribers >= 500 ? 'warn' : 'fail'}", "current": "${channelInfo.subscribers >= 500 ? 'Eligible — likely not activated' : 'Not eligible yet'}", "issue": "specific membership issue", "fix": "exact membership tier strategy"},
-    {"item": "Affiliate Marketing", "status": "fail", "current": "likely not monetizing descriptions", "issue": "specific affiliate opportunity for their niche", "fix": "exact affiliate strategy with specific programs for their content type"},
+    {"item": "Channel Memberships", "status": "${channelInfo.subscribers >= 500 ? 'warn' : 'fail'}", "current": "${channelInfo.subscribers >= 500 ? 'Eligible — activation status not detectable via API' : 'Not eligible yet'}", "issue": "specific membership issue", "fix": "exact membership tier strategy"},
+    {"item": "Affiliate Marketing", "status": ${affiliateStatus}, "current": ${affiliateCurrent}, "issue": "specific affiliate opportunity for their niche", "fix": "exact affiliate strategy with specific programs for their content type"},
     {"item": "Sponsorship Readiness", "status": "${channelInfo.subscribers >= 1000 ? 'warn' : 'fail'}", "current": "${formatNumber(channelInfo.subscribers)} subscribers", "issue": "specific sponsorship readiness assessment", "fix": "exact steps to attract first sponsor"},
-    {"item": "Super Thanks & Donations", "status": "warn", "current": "likely not enabled", "issue": "specific issue", "fix": "exact steps to enable and promote"}
+    {"item": "Super Thanks & Donations", "status": "warn", "current": "Super Thanks status not detectable via API — enable manually in YouTube Studio", "issue": "specific issue", "fix": "exact steps to enable and promote"}
   ],
   "topFixes": [
     "Most impactful fix with specific steps — reference their actual data",
