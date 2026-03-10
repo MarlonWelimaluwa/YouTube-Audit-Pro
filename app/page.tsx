@@ -123,7 +123,7 @@ export default function Home() {
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: system }] },
             contents: [{ role: 'user', parts: [{ text: user }] }],
-            generationConfig: { temperature: 0.3, maxOutputTokens: 8000 },
+            generationConfig: { temperature: 0.3, maxOutputTokens: 16000 },
           }),
         }
     );
@@ -324,7 +324,7 @@ Return this EXACT JSON:
   },
   "topVideos": [
     ${topVideos.slice(0, 2).map((v: {title: string; views: number; likes: number}) => `{
-      "title": "${v.title.replace(/"/g, '\"').slice(0, 80)}",
+      "title": "${v.title.replace(/"/g, '\\"').slice(0, 80)}",
       "views": "${formatNum(v.views)}",
       "likes": "${formatNum(v.likes)}",
       "whatWorked": "specific reason this video outperformed based on title, engagement ratio and content type"
@@ -414,6 +414,7 @@ Return this EXACT JSON:
     ]
   }
 }`;
+
 
       setLoadingStep(3);
 
