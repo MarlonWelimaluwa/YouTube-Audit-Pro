@@ -596,12 +596,27 @@ Return this EXACT JSON:
       doc.text(r.channelName, W - M, H - 3, { align: 'right' });
     }
 
-    // ── PAGE 2: CRITICAL ISSUES + TOP FIXES ──
-    np();
-    doc.setFillColor(255, 0, 0); doc.rect(0, 0, W, 13, 'F');
-    doc.setTextColor(255, 255, 255); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
-    doc.text('CRITICAL ISSUES & TOP FIXES', M, 9.5);
-    y = 20;
+    // Smart section header — new page only if < 80mm remaining
+    function sectionHeader(title: string) {
+      const remaining = H - 12 - y;
+      if (y <= 20 || remaining < 80) {
+        np();
+        doc.setFillColor(255, 0, 0); doc.rect(0, 0, W, 13, 'F');
+        doc.setTextColor(255, 255, 255); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+        doc.text(title, M, 9.5);
+        y = 20;
+      } else {
+        y += 8;
+        cy(14);
+        doc.setFillColor(255, 0, 0); doc.roundedRect(M, y, CW, 10, 2, 2, 'F');
+        doc.setTextColor(255, 255, 255); doc.setFontSize(9); doc.setFont('helvetica', 'bold');
+        doc.text(title, M + 5, y + 7);
+        y += 14;
+      }
+    }
+
+    // ── CRITICAL ISSUES + TOP FIXES ──
+    sectionHeader('CRITICAL ISSUES & TOP FIXES');
 
     if (r.criticalIssues?.length > 0) {
       r.criticalIssues.forEach((issue, idx) => {
@@ -640,12 +655,8 @@ Return this EXACT JSON:
       y += bh + 3;
     });
 
-    // ── PAGE 3: SEO + CONTENT ──
-    np();
-    doc.setFillColor(255, 0, 0); doc.rect(0, 0, W, 13, 'F');
-    doc.setTextColor(255, 255, 255); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
-    doc.text('SEO & CONTENT AUDIT', M, 9.5);
-    y = 20;
+    // ── SEO + CONTENT ──
+    sectionHeader('SEO & CONTENT AUDIT');
 
     const auditItems = [...(r.seoAudit || []), ...(r.contentAudit || [])];
     auditItems.forEach(item => {
@@ -673,12 +684,8 @@ Return this EXACT JSON:
       y += bh + 4;
     });
 
-    // ── PAGE 4: ENGAGEMENT + MONETIZATION ──
-    np();
-    doc.setFillColor(255, 0, 0); doc.rect(0, 0, W, 13, 'F');
-    doc.setTextColor(255, 255, 255); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
-    doc.text('ENGAGEMENT & MONETIZATION', M, 9.5);
-    y = 20;
+    // ── ENGAGEMENT + MONETIZATION ──
+    sectionHeader('ENGAGEMENT & MONETIZATION');
 
     [...(r.engagementAudit || []), ...(r.monetizationAudit || [])].forEach(item => {
       const col = stc(item.status);
@@ -705,12 +712,8 @@ Return this EXACT JSON:
       y += bh + 4;
     });
 
-    // ── PAGE 5: GROWTH STRATEGY ──
-    np();
-    doc.setFillColor(255, 0, 0); doc.rect(0, 0, W, 13, 'F');
-    doc.setTextColor(255, 255, 255); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
-    doc.text('90-DAY GROWTH STRATEGY', M, 9.5);
-    y = 20;
+    // ── GROWTH STRATEGY ──
+    sectionHeader('90-DAY GROWTH STRATEGY');
 
     const gGroups = [
       { label: 'DO TODAY', items: r.growthStrategy?.immediate, col: [239, 68, 68] as [number, number, number], bg: [25, 8, 8] as [number, number, number] },
