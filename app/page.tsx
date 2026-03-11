@@ -486,8 +486,8 @@ Return this EXACT JSON:
             return safe[c] || '';
           });
     }
-    function np() { doc.addPage(); y = M; }
-    function cy(n: number) { if (y + n > H - 20) np(); }
+    function np() { doc.addPage(); pageNum++; y = M; }
+    function cy(n: number) { if (y + n > H - 20) npWithHeader(); }
     function wrap(t: string, w: number, fs: number): string[] { doc.setFontSize(fs); return doc.splitTextToSize(clean(t), w); }
     function sc(s: number): [number, number, number] { return s >= 80 ? [34, 197, 94] : s >= 60 ? [245, 158, 11] : [239, 68, 68]; }
     function stc(s: string): [number, number, number] { return (s === 'good' || s === 'pass') ? [34, 197, 94] : (s === 'warn' || s === 'needs-improvement') ? [245, 158, 11] : [239, 68, 68]; }
@@ -596,22 +596,42 @@ Return this EXACT JSON:
       doc.text(r.channelName, W - M, H - 3, { align: 'right' });
     }
 
-    // Smart section header — new page only if < 80mm remaining
-    function sectionHeader(title: string) {
-      const remaining = H - 12 - y;
-      if (y <= 20 || remaining < 80) {
-        np();
+    // Track current section for continuation headers
+    let currentSection = '';
+
+    function drawSectionHeader(title: string, fullWidth: boolean) {
+      if (fullWidth) {
         doc.setFillColor(255, 0, 0); doc.rect(0, 0, W, 13, 'F');
         doc.setTextColor(255, 255, 255); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
         doc.text(title, M, 9.5);
         y = 20;
       } else {
-        y += 8;
-        cy(14);
         doc.setFillColor(255, 0, 0); doc.roundedRect(M, y, CW, 10, 2, 2, 'F');
         doc.setTextColor(255, 255, 255); doc.setFontSize(9); doc.setFont('helvetica', 'bold');
         doc.text(title, M + 5, y + 7);
         y += 14;
+      }
+    }
+
+    // np with auto continuation header
+    // Continuation page break — redraws section header automatically
+    function npWithHeader() {
+      doc.addPage(); pageNum++; y = 20;
+      if (currentSection) {
+        drawSectionHeader(currentSection + ' (continued)', true);
+      }
+    }
+
+    function sectionHeader(title: string) {
+      currentSection = title;
+      const remaining = H - 12 - y;
+      if (y <= 20 || remaining < 80) {
+        doc.addPage(); pageNum++; y = 20;
+        drawSectionHeader(title, true);
+      } else {
+        y += 8;
+        if (y + 14 > H - 12) { doc.addPage(); pageNum++; y = 20; drawSectionHeader(title, true); }
+        else { drawSectionHeader(title, false); }
       }
     }
 
