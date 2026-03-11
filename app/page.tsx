@@ -486,7 +486,7 @@ Return this EXACT JSON:
             return safe[c] || '';
           });
     }
-    function np() { doc.addPage(); pageNum++; y = M; }
+    function np() { doc.addPage(); y = M; }
     function cy(n: number) { if (y + n > H - 20) npWithHeader(); }
     function wrap(t: string, w: number, fs: number): string[] { doc.setFontSize(fs); return doc.splitTextToSize(clean(t), w); }
     function sc(s: number): [number, number, number] { return s >= 80 ? [34, 197, 94] : s >= 60 ? [245, 158, 11] : [239, 68, 68]; }
@@ -616,7 +616,7 @@ Return this EXACT JSON:
     // np with auto continuation header
     // Continuation page break — redraws section header automatically
     function npWithHeader() {
-      doc.addPage(); pageNum++; y = 20;
+      doc.addPage(); y = 20;
       if (currentSection) {
         drawSectionHeader(currentSection + ' (continued)', true);
       }
@@ -626,11 +626,11 @@ Return this EXACT JSON:
       currentSection = title;
       const remaining = H - 12 - y;
       if (y <= 20 || remaining < 80) {
-        doc.addPage(); pageNum++; y = 20;
+        doc.addPage(); y = 20;
         drawSectionHeader(title, true);
       } else {
         y += 8;
-        if (y + 14 > H - 12) { doc.addPage(); pageNum++; y = 20; drawSectionHeader(title, true); }
+        if (y + 14 > H - 12) { doc.addPage(); y = 20; drawSectionHeader(title, true); }
         else { drawSectionHeader(title, false); }
       }
     }
